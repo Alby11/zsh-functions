@@ -1,0 +1,19 @@
+# vim: ft=zsh
+
+distant_install() {
+    local remote_host="$1"
+    
+    if [[ -z "$remote_host" ]]; then
+        echo "Usage: install_distant_remote <remote-host>"
+        return 1
+    fi
+
+    ssh "$remote_host" '
+        if ! command -v distant &> /dev/null; then
+            echo "Installing distant..."
+            curl -L https://sh.distant.dev | sh -s -- --on-conflict overwrite
+        else
+            echo "Distant is already installed."
+        fi
+    '
+}
