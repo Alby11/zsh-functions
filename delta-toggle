@@ -1,0 +1,5 @@
+# vim: ft=zsh
+
+delta-toggle() {
+    eval "export DELTA_FEATURES='$(-delta-features-toggle $1 | tee /dev/stderr)'"
+}
