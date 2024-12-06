@@ -21,7 +21,7 @@ function dnf_remove_transaction() {
   echo "$all_packages"
   echo
   echo -n "Do you want to proceed with per-package removal? (y/N): "
-  read confirm
+  read confirm </dev/tty
 
   if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     echo "Aborting."
@@ -30,20 +30,36 @@ function dnf_remove_transaction() {
 
   local failed_packages=()
 
-  # Iterate over each package, handling newlines correctly
-  echo "$all_packages" | while IFS= read -r package; do
+  # Iterate over each package
+  while IFS= read -r package; do
     if dnf list installed "$package" &>/dev/null; then
       echo "Attempting to remove $package..."
-      if sudo dnf autoremove "$package"; then
-        echo "Successfully removed $package."
+      # Show the user the dependencies that would be removed
+      sudo dnf autoremove "$package" --assumeno
+      echo -n "Do you want to proceed with removing $package and its dependencies? (y/N): "
+      read -r user_input </dev/tty
+      if [[ "$user_input" == "y" || "$user_input" == "Y" ]]; then
+        # Run the command interactively using expect
+        expect << EOF
+spawn sudo dnf autoremove "$package"
+expect {
+  -re {Is this ok.*\\[y/N\\]:} { send "y\r"; exp_continue }
+  eof
+}
+EOF
+        if [ $? -eq 0 ]; then
+          echo "Successfully removed $package."
+        else
+          echo "Failed to remove $package."
+          failed_packages+=("$package")
+        fi
       else
-        echo "Failed to remove $package."
-        failed_packages+=("$package")
+        echo "Skipping removal of $package."
       fi
     else
       echo "Package $package is not installed. Skipping."
     fi
-  done
+  done <<< "$all_packages"
 
   if [[ ${#failed_packages[@]} -gt 0 ]]; then
     echo "The following packages could not be removed:"
