@@ -1,56 +1,73 @@
 # vim: ft=zsh
 
+# Function: dnf_remove_transaction
+# Purpose: Iteratively remove packages from a specific transaction in Fedora using `dnf`,
+#          providing the user with detailed control over each removal step.
 function dnf_remove_transaction() {
+  # Check if the transaction ID is provided as an argument
   if [[ -z "$1" ]]; then
     echo "Usage: dnf_remove_transaction <transaction_id>"
-    return 1
+    return 1  # Exit with an error code if no transaction ID is supplied
   fi
 
-  local transaction_id="$1"
+  local transaction_id="$1"  # Store the transaction ID for use in the function
 
-  # Extract the list of packages installed in the transaction
+  # Step 1: Extract the list of packages installed in the given transaction
+  # `dnf history info <transaction_id>` shows the details of a transaction.
+  # We grep for "Install " lines, then use `awk` to extract the package name (2nd field).
   local all_packages
   all_packages=$(dnf history info "$transaction_id" | grep "Install " | awk '{print $2}')
 
+  # If no packages were found for the transaction, inform the user and exit
   if [[ -z "$all_packages" ]]; then
     echo "No packages found for transaction ID: $transaction_id"
-    return 1
+    return 1  # Exit with an error code
   fi
 
+  # Step 2: Inform the user about the packages to be removed and confirm
   echo "Preparing to remove the following packages:"
   echo "$all_packages"
   echo
   echo -n "Do you want to proceed with per-package removal? (y/N): "
-  read confirm </dev/tty
+  read confirm </dev/tty  # Read user input directly from the terminal (important for scripts)
 
+  # If the user does not confirm with "y" or "Y", abort the operation
   if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     echo "Aborting."
-    return 0
+    return 0  # Exit gracefully without an error
   fi
 
+  # Step 3: Initialize a list to track any failed package removals
   local failed_packages=()
 
-  # Iterate over each package
+  # Step 4: Loop through each package in the transaction
   while IFS= read -r package; do
+    # Check if the package is currently installed
     if dnf list installed "$package" &>/dev/null; then
       echo "Attempting to remove $package..."
-      # Show the user the dependencies that would be removed
+      
+      # Preview the dependencies that would be removed with `--assumeno`
       sudo dnf autoremove "$package" --assumeno
       echo -n "Do you want to proceed with removing $package and its dependencies? (y/N): "
-      read -r user_input </dev/tty
+      read -r user_input </dev/tty  # Prompt the user for confirmation
+
       if [[ "$user_input" == "y" || "$user_input" == "Y" ]]; then
-        # Run the command interactively using expect
+        # Use `expect` to automate interaction with the `dnf` confirmation prompt
         expect << EOF
 spawn sudo dnf autoremove "$package"
 expect {
-  -re {Is this ok.*\\[y/N\\]:} { send "y\r"; exp_continue }
+  # Match the confirmation prompt and send "y"
+  -re {Is this ok.*\[y/N\]:} { send "y\r"; exp_continue }
+  # End when `dnf` finishes
   eof
 }
 EOF
+        # Check if the `expect` command succeeded
         if [ $? -eq 0 ]; then
           echo "Successfully removed $package."
         else
           echo "Failed to remove $package."
+          # Add the package to the list of failed removals
           failed_packages+=("$package")
         fi
       else
@@ -59,14 +76,16 @@ EOF
     else
       echo "Package $package is not installed. Skipping."
     fi
-  done <<< "$all_packages"
+  done <<< "$all_packages"  # Feed the list of packages into the loop
 
+  # Step 5: Report the status of removals
   if [[ ${#failed_packages[@]} -gt 0 ]]; then
     echo "The following packages could not be removed:"
-    printf '%s\n' "${failed_packages[@]}"
+    printf '%s\n' "${failed_packages[@]}"  # Print each failed package on a new line
   else
     echo "All packages were removed successfully."
   fi
 
+  # Final message
   echo "Package removal process completed."
 }
