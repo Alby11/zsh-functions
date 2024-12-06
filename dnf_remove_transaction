@@ -1,7 +1,7 @@
 # vim: ft=zsh
 
 # Function: dnf_remove_transaction
-# Purpose: Iteratively remove packages from a specific transaction in Fedora using `dnf`,
+# Purpose: Iteratively remove packages from a specific transaction in Fedora/RHEL using `dnf`,
 #          providing the user with detailed control over each removal step.
 function dnf_remove_transaction() {
   # Check if the transaction ID is provided as an argument
