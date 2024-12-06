@@ -1,0 +1,56 @@
+# vim: ft=zsh
+
+function dnf_remove_transaction() {
+  if [[ -z "$1" ]]; then
+    echo "Usage: dnf_remove_transaction <transaction_id>"
+    return 1
+  fi
+
+  local transaction_id="$1"
+
+  # Extract the list of packages installed in the transaction
+  local all_packages
+  all_packages=$(dnf history info "$transaction_id" | grep "Install " | awk '{print $2}')
+
+  if [[ -z "$all_packages" ]]; then
+    echo "No packages found for transaction ID: $transaction_id"
+    return 1
+  fi
+
+  echo "Preparing to remove the following packages:"
+  echo "$all_packages"
+  echo
+  echo -n "Do you want to proceed with per-package removal? (y/N): "
+  read confirm
+
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "Aborting."
+    return 0
+  fi
+
+  local failed_packages=()
+
+  # Iterate over each package, handling newlines correctly
+  echo "$all_packages" | while IFS= read -r package; do
+    if dnf list installed "$package" &>/dev/null; then
+      echo "Attempting to remove $package..."
+      if sudo dnf autoremove "$package"; then
+        echo "Successfully removed $package."
+      else
+        echo "Failed to remove $package."
+        failed_packages+=("$package")
+      fi
+    else
+      echo "Package $package is not installed. Skipping."
+    fi
+  done
+
+  if [[ ${#failed_packages[@]} -gt 0 ]]; then
+    echo "The following packages could not be removed:"
+    printf '%s\n' "${failed_packages[@]}"
+  else
+    echo "All packages were removed successfully."
+  fi
+
+  echo "Package removal process completed."
+}
