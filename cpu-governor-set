@@ -1,0 +1,27 @@
+# vim: ft=zsh
+
+function cpu-governor-set () {
+    if [[ "$1" == "help" ]]; then
+        echo "Usage: cpu-governor-set <governor>"
+        echo "Possible values for governor:"
+        echo "  performance"
+        echo "  powersave"
+        echo "  userspace"
+        echo "  ondemand"
+        echo "  conservative"
+        echo "  schedutil"
+        return
+    fi
+
+    local governor="$1"
+    if [[ -z "$governor" ]]; then
+        echo "Error: No governor specified. Use 'help' for usage information."
+        return 1
+    fi
+
+    # Set scaling governors to the specified governor
+    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do
+        echo "$governor" | sudo tee "$cpu/cpufreq/scaling_governor" > /dev/null
+    done
+    echo "CPU governor set to $governor"
+}
